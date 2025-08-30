@@ -2,7 +2,7 @@ import {
     Membership,
     Paginated,
     Project,
-    Response,
+    Response as ApiResponse,
     TimeEntry,
     TimeEntryStartRequest,
     TimeEntryStopRequest,
@@ -82,7 +82,7 @@ export class ApiClient {
     /**
      * Handles the response from the fetch call, checking for errors.
      */
-    private async handleResponse<T>(response: Response): Promise<T> {
+    private async handleResponse<T>(response: globalThis.Response): Promise<T> {
         if (!response.ok) {
             const errorBody = await response.text();
             throw new Error(`API Error: ${response.status} ${response.statusText} - ${errorBody}`);
@@ -104,7 +104,7 @@ export class ApiClient {
      * Fetches the memberships for the current user.
      * Corresponds to: GET /v1/users/me/memberships
      */
-    public getMemberships(): Promise<Response<Membership[]>> {
+    public getMemberships(): Promise<ApiResponse<Membership[]>> {
         return this.get('/v1/users/me/memberships');
     }
 
@@ -121,7 +121,7 @@ export class ApiClient {
      * Fetches the currently active time entry for the user.
      * Corresponds to: GET /v1/users/me/time-entries/active
      */
-    public getActiveTimeEntry(): Promise<Response<TimeEntry>> {
+    public getActiveTimeEntry(): Promise<ApiResponse<TimeEntry>> {
         return this.get('/v1/users/me/time-entries/active');
     }
 
@@ -131,7 +131,7 @@ export class ApiClient {
      * @param organizationId The ID of the organization.
      * @param data The details for the new time entry.
      */
-    public startTimeEntry(organizationId: string, data: TimeEntryStartRequest): Promise<Response<TimeEntry>> {
+    public startTimeEntry(organizationId: string, data: TimeEntryStartRequest): Promise<ApiResponse<TimeEntry>> {
         return this.post(`/v1/organizations/${organizationId}/time-entries`, data);
     }
 
@@ -142,7 +142,7 @@ export class ApiClient {
      * @param timeEntryId The ID of the time entry to update.
      * @param data The update payload (e.g., the end time).
      */
-    public stopTimeEntry(organizationId: string, timeEntryId: string, data: TimeEntryStopRequest): Promise<Response<TimeEntry>> {
+    public stopTimeEntry(organizationId: string, timeEntryId: string, data: TimeEntryStopRequest): Promise<ApiResponse<TimeEntry>> {
         return this.put(`/v1/organizations/${organizationId}/time-entries/${timeEntryId}`, data);
     }
 }

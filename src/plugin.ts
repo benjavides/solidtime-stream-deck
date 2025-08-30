@@ -45,6 +45,7 @@ async function fetchInitialData(client: ApiClient): Promise<void> {
         // 2. Get the list of projects for that organization
         const projectsResponse = await client.getActiveProjects(organizationId);
         projects = projectsResponse.data || [];
+        toggleAction.setProjects(projects);
         streamDeck.logger.info(`Fetched ${projects.length} active projects.`);
 
         // 3. Get the currently active time entry, if one exists
