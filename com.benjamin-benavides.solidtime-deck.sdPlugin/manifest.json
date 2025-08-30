@@ -14,10 +14,14 @@
 			],
 			"States": [
 				{
-					"Image": "imgs/actions/toggle-project/key",
-					"TitleAlignment": "middle"
+					"Name": "Not Running",
+					"Image": "imgs/actions/toggle-project/key_stopped"
+				},
+				{
+					"Name": "Running",
+					"Image": "imgs/actions/toggle-project/key_running"
 				}
-			]
+        	]
 		}
 	],
 	"Category": "solidtime-deck",
