@@ -1,0 +1,47 @@
+{
+	"Name": "solidtime-deck",
+	"Version": "0.1.0.0",
+	"Author": "Benjamin Benavides",
+	"Actions": [
+		{
+			"Name": "Toggle Project",
+			"UUID": "com.benjamin-benavides.solidtime-deck.toggle-project",
+			"Icon": "imgs/actions/toggle-project/icon",
+			"Tooltip": "Toggles a Solidtime project timer.",
+			"PropertyInspectorPath": "ui/toggle-project.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/toggle-project/key",
+					"TitleAlignment": "middle"
+				}
+			]
+		}
+	],
+	"Category": "solidtime-deck",
+	"CategoryIcon": "imgs/plugin/category-icon",
+	"CodePath": "bin/plugin.js",
+	"Description": "Control Solidtime project timers from the stream deck",
+	"Icon": "imgs/plugin/marketplace",
+	"SDKVersion": 2,
+	"Software": {
+		"MinimumVersion": "6.5"
+	},
+	"OS": [
+		{
+			"Platform": "mac",
+			"MinimumVersion": "12"
+		},
+		{
+			"Platform": "windows",
+			"MinimumVersion": "10"
+		}
+	],
+	"Nodejs": {
+		"Version": "20",
+		"Debug": "enabled"
+	},
+	"UUID": "com.benjamin-benavides.solidtime-deck"
+}

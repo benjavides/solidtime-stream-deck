@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+
+<head lang="en">
+    <title>Solidtime Settings</title>
+    <meta charset="utf-8" />
+    <script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
+</head>
+
+<body>
+    <sdpi-item label="Solidtime URL">
+        <sdpi-textfield 
+            global 
+            setting="solidtimeBaseUrl" 
+            placeholder="e.g., https://app.solidtime.io/api" 
+            required>
+        </sdpi-textfield>
+    </sdpi-item>
+
+    <sdpi-item label="Access Token">
+        <sdpi-password 
+            global 
+            setting="accessToken" 
+            required>
+        </sdpi-password>
+    </sdpi-item>
+
+</body>
+</html>
