@@ -6,7 +6,6 @@
     <meta charset="utf-8" />
     <script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
     <style>
-        /* Add some styling for the refresh button layout */
         .flex-container {
             display: flex;
             align-items: center;
@@ -16,7 +15,7 @@
         }
         .flex-shrink {
             flex-shrink: 0;
-            margin-left: 8px; /* space between dropdown and button */
+            margin-left: 8px;
         }
     </style>
 </head>
@@ -55,27 +54,33 @@
             </div>
         </div>
     </sdpi-item>
+    
+    <sdpi-item label="Title Display" title="Configure the button's title text and timer visibility.">
+        <div class="flex-container">
+            <div class="flex-grow">
+                <sdpi-textfield setting="titleOverride" placeholder="Optional override"></sdpi-textfield>
+            </div>
+            <div class="flex-shrink">
+                <!-- The label is now an attribute of the component -->
+                <sdpi-checkbox setting="showElapsedTime" default="true" label="Show Time"></sdpi-checkbox>
+            </div>
+        </div>
+    </sdpi-item>
 
     <sdpi-item label="Billable" title="Mark time entries as billable by default for this project.">
-        <!-- 
-            This checkbox saves its value to the 'billable' action setting.
-            It does NOT have the 'global' attribute.
-            'default="true"' makes it checked by default on new actions.
-        -->
         <sdpi-checkbox setting="billable" default="true"></sdpi-checkbox>
     </sdpi-item>
 
     <script>
-        // Wait for the document and SDPI components to be fully loaded.
         document.addEventListener('DOMContentLoaded', () => {
             const projectSelect = document.getElementById('project-select');
             const refreshBtn = document.getElementById('refresh-btn');
 
-            refreshBtn.addEventListener('click', () => {
-                // The refresh() method is built into the sdpi-select component.
-                // It re-triggers the 'getProjects' datasource request.
-                projectSelect.refresh();
-            });
+            if (refreshBtn && projectSelect) {
+                refreshBtn.addEventListener('click', () => {
+                    projectSelect.refresh();
+                });
+            }
         });
     </script>
 </body>

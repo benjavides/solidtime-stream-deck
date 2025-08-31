@@ -10,4 +10,6 @@ export type GlobalSettings = {
 export type ActionSettings = {
     projectId?: string;
     billable?: boolean;
+    showElapsedTime?: boolean;
+    titleOverride?: string;
 };
