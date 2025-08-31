@@ -15,11 +15,13 @@
 			"States": [
 				{
 					"Name": "Not Running",
-					"Image": "imgs/actions/toggle-project/key_stopped"
+					"Image": "imgs/actions/toggle-project/key_stopped",
+					"TitleAlignment": "middle"
 				},
 				{
 					"Name": "Running",
-					"Image": "imgs/actions/toggle-project/key_running"
+					"Image": "imgs/actions/toggle-project/key_running",
+					"TitleAlignment": "middle"
 				}
         	]
 		}
