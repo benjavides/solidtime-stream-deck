@@ -56,6 +56,15 @@
         </div>
     </sdpi-item>
 
+    <sdpi-item label="Billable" title="Mark time entries as billable by default for this project.">
+        <!-- 
+            This checkbox saves its value to the 'billable' action setting.
+            It does NOT have the 'global' attribute.
+            'default="true"' makes it checked by default on new actions.
+        -->
+        <sdpi-checkbox setting="billable" default="true"></sdpi-checkbox>
+    </sdpi-item>
+
     <script>
         // Wait for the document and SDPI components to be fully loaded.
         document.addEventListener('DOMContentLoaded', () => {

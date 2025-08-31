@@ -86,7 +86,7 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
             return;
         }
 
-        const { projectId } = ev.payload.settings;
+        const { projectId, billable = true } = ev.payload.settings;
         if (!projectId) {
             streamDeck.logger.info("Key pressed on a button with no project assigned.");
             return;
@@ -122,7 +122,7 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
                     member_id: this.memberId,
                     project_id: projectId,
                     start: nowWithoutMilliseconds,
-                    billable: true // Defaulting to true as per spec
+                    billable: billable // Defaulting to true as per spec
                 });
             }
         } catch (error) {

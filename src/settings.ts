@@ -9,4 +9,5 @@ export type GlobalSettings = {
 // We will add Action-specific settings here later.
 export type ActionSettings = {
     projectId?: string;
+    billable?: boolean;
 };
