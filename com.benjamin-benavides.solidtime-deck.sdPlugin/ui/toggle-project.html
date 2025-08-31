@@ -5,13 +5,23 @@
     <title>Solidtime Settings</title>
     <meta charset="utf-8" />
     <script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
+    <style>
+        /* Add some styling for the refresh button layout */
+        .flex-container {
+            display: flex;
+            align-items: center;
+        }
+        .flex-grow {
+            flex-grow: 1;
+        }
+        .flex-shrink {
+            flex-shrink: 0;
+            margin-left: 8px; /* space between dropdown and button */
+        }
+    </style>
 </head>
 
 <body>
-    <!-- 
-        These first two items use the 'global' attribute because the URL and Token
-        are shared across the entire plugin.
-    -->
     <sdpi-item label="Solidtime URL">
         <sdpi-textfield 
             global 
@@ -30,14 +40,35 @@
     </sdpi-item>
 
     <sdpi-item label="Project">
-        <sdpi-select
-            setting="projectId"
-            datasource="getProjects"
-            loading="Fetching projects..."
-            placeholder="Select a project">
-        </sdpi-select>
+        <div class="flex-container">
+            <div class="flex-grow">
+                <sdpi-select
+                    id="project-select"
+                    setting="projectId"
+                    datasource="getProjects"
+                    loading="Fetching projects..."
+                    placeholder="Select a project">
+                </sdpi-select>
+            </div>
+            <div class="flex-shrink">
+                <sdpi-button id="refresh-btn">Refresh</sdpi-button>
+            </div>
+        </div>
     </sdpi-item>
 
-</body>
+    <script>
+        // Wait for the document and SDPI components to be fully loaded.
+        document.addEventListener('DOMContentLoaded', () => {
+            const projectSelect = document.getElementById('project-select');
+            const refreshBtn = document.getElementById('refresh-btn');
 
+            refreshBtn.addEventListener('click', () => {
+                // The refresh() method is built into the sdpi-select component.
+                // It re-triggers the 'getProjects' datasource request.
+                projectSelect.refresh();
+            });
+        });
+    </script>
+</body>
 </html>
+
