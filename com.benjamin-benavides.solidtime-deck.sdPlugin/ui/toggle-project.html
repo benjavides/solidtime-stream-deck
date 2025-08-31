@@ -38,6 +38,26 @@
         </sdpi-password>
     </sdpi-item>
 
+    <sdpi-item label="Organization">
+        <!-- Wrap in flex-container to add the button -->
+        <div class="flex-container">
+            <div class="flex-grow">
+                <sdpi-select
+                    global
+                    id="org-select"
+                    setting="organizationId"
+                    datasource="getOrganizations"
+                    loading="Fetching..."
+                    placeholder="Enter credentials first">
+                </sdpi-select>
+            </div>
+            <div class="flex-shrink">
+                <!-- Add the organization refresh button -->
+                <sdpi-button id="org-refresh-btn">Refresh</sdpi-button>
+            </div>
+        </div>
+    </sdpi-item>
+
     <sdpi-item label="Project">
         <div class="flex-container">
             <div class="flex-grow">
@@ -50,7 +70,7 @@
                 </sdpi-select>
             </div>
             <div class="flex-shrink">
-                <sdpi-button id="refresh-btn">Refresh</sdpi-button>
+                <sdpi-button id="project-refresh-btn">Refresh</sdpi-button>
             </div>
         </div>
     </sdpi-item>
@@ -74,10 +94,25 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const projectSelect = document.getElementById('project-select');
-            const refreshBtn = document.getElementById('refresh-btn');
+            const orgSelect = document.getElementById('org-select');
+            const orgRefreshBtn = document.getElementById('org-refresh-btn');
+            const projectRefreshBtn = document.getElementById('project-refresh-btn');
 
-            if (refreshBtn && projectSelect) {
-                refreshBtn.addEventListener('click', () => {
+            if (orgRefreshBtn && orgSelect) {
+                orgRefreshBtn.addEventListener('click', () => {
+                    orgSelect.refresh();
+                });
+            }
+            
+            if (projectRefreshBtn && projectSelect) {
+                projectRefreshBtn.addEventListener('click', () => {
+                    projectSelect.refresh();
+                });
+            }
+
+            // When the organization selection changes, automatically refresh the project list.
+            if (orgSelect && projectSelect) {
+                orgSelect.addEventListener('change', () => {
                     projectSelect.refresh();
                 });
             }

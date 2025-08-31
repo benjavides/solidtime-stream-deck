@@ -1,6 +1,6 @@
 import { action, SendToPluginEvent, WillAppearEvent, WillDisappearEvent, JsonValue, SingletonAction, streamDeck, KeyDownEvent, DidReceiveSettingsEvent, KeyAction } from "@elgato/streamdeck";
 import { ApiClient } from "../api/client";
-import { Project, TimeEntry } from "../api/types";
+import { Project, TimeEntry, Membership } from "../api/types";
 import { ActionSettings } from "../settings";
 
 // Define constants for the two states from the manifest for readability.
@@ -52,6 +52,7 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
     // Properties to hold the shared API client and data from the main plugin.
     private apiClient?: ApiClient;
     private projects: Project[] = [];
+    private memberships: Membership[] = [];
     private organizationId?: string;
     private memberId?: string;
     private triggerPoll?: () => void;
@@ -69,6 +70,10 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
 
     public setProjects(projects: Project[]): void {
         this.projects = projects;
+    }
+
+    public setMemberships(memberships: Membership[]): void {
+        this.memberships = memberships;
     }
 
     public setContext(context: PluginContext): void {
@@ -228,23 +233,47 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
      * Listens for messages from the Property Inspector UI, primarily to handle the project list datasource request.
      */
     override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, ActionSettings>): Promise<void> {
-        if (!(ev.payload instanceof Object) || !("event" in ev.payload) || ev.payload.event !== "getProjects") {
+        if (!(ev.payload instanceof Object) || !("event" in ev.payload)) {
             return;
         }
 
-        if (this.triggerRefresh && "isRefresh" in ev.payload && ev.payload.isRefresh === true) {
-            streamDeck.logger.info("Refresh triggered from UI. Fetching new project list...");
-            await this.triggerRefresh();
+        // Handle the request for the organization list
+        if (ev.payload.event === "getOrganizations") {
+            streamDeck.logger.info("UI is requesting the list of organizations."); // Your requested log.
+
+            // If this is a refresh, re-fetch all the initial data.
+            if (this.triggerRefresh && "isRefresh" in ev.payload && ev.payload.isRefresh === true) {
+                streamDeck.logger.info("Refresh triggered for organizations. Fetching new data...");
+                await this.triggerRefresh();
+            }
+
+            const organizationItems = this.memberships.map(m => ({
+                label: m.organization.name,
+                value: m.organization.id
+            }));
+            streamDeck.ui.current?.sendToPropertyInspector({
+                event: "getOrganizations",
+                items: organizationItems
+            });
+            return;
         }
 
-        const projectItems = this.projects.map(project => ({
-            label: project.name,
-            value: project.id
-        }));
+        // Handle the request for the project list
+        if (ev.payload.event === "getProjects") {
+            if (this.triggerRefresh && "isRefresh" in ev.payload && ev.payload.isRefresh === true) {
+                streamDeck.logger.info("Refresh triggered from UI. Fetching new project list...");
+                await this.triggerRefresh();
+            }
 
-        streamDeck.ui.current?.sendToPropertyInspector({
-            event: "getProjects",
-            items: projectItems
-        });
+            const projectItems = this.projects.map(project => ({
+                label: project.name,
+                value: project.id
+            }));
+
+            streamDeck.ui.current?.sendToPropertyInspector({
+                event: "getProjects",
+                items: projectItems
+            });
+        }
     }
 }
