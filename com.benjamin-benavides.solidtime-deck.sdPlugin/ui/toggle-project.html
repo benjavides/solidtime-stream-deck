@@ -23,11 +23,13 @@
 <body>
     <sdpi-item label="Solidtime URL">
         <sdpi-textfield 
+            id="base-url-input"
             global 
             setting="solidtimeBaseUrl" 
             placeholder="e.g., https://app.solidtime.io/api" 
             required>
         </sdpi-textfield>
+        <sdpi-note id="base-url-warning" style="display:none; margin-top:6px;">URL must end with “/api”. Example: https://app.solidtime.io/api</sdpi-note>
     </sdpi-item>
 
     <sdpi-item label="Access Token">
@@ -76,6 +78,10 @@
         </div>
         <sdpi-note id="project-warning" style="display:none; margin-top:6px;">Previously selected project is no longer available. Please reselect.</sdpi-note>
     </sdpi-item>
+
+    <sdpi-item label="Billable" title="Mark time entries as billable by default for this project.">
+        <sdpi-checkbox setting="billable" default="true"></sdpi-checkbox>
+    </sdpi-item>
     
     <sdpi-item label="Title Display" title="Configure the button's title text and timer visibility.">
         <div class="flex-container">
@@ -89,10 +95,7 @@
         </div>
     </sdpi-item>
 
-    <sdpi-item label="Billable" title="Mark time entries as billable by default for this project.">
-        <sdpi-checkbox setting="billable" default="true"></sdpi-checkbox>
-    </sdpi-item>
-
+    
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const projectSelect = document.getElementById('project-select');
@@ -101,6 +104,21 @@
             const projectRefreshBtn = document.getElementById('project-refresh-btn');
             const orgWarning = document.getElementById('org-warning');
             const projectWarning = document.getElementById('project-warning');
+            const baseUrlInput = document.getElementById('base-url-input');
+            const baseUrlWarning = document.getElementById('base-url-warning');
+
+            function validateBaseUrl() {
+                if (!baseUrlInput) return true;
+                const value = (baseUrlInput.value || '').trim();
+                const valid = value === '' || value.endsWith('/api');
+                if (baseUrlWarning) baseUrlWarning.style.display = valid ? 'none' : '';
+                // If the textfield supports invalid attribute, toggle it for visual feedback
+                try {
+                    if (!valid) { baseUrlInput.setAttribute('invalid', ''); }
+                    else { baseUrlInput.removeAttribute('invalid'); }
+                } catch {}
+                return valid;
+            }
 
             function setProjectEnabled(enabled) {
                 if (!projectSelect || !projectRefreshBtn) return;
@@ -183,4 +201,3 @@
     </script>
 </body>
 </html>
-

@@ -21,6 +21,15 @@ let membershipsCache: { data: Membership[]; timestamp: number } | undefined;
 let membershipsInFlight: Promise<Membership[]> | undefined;
 const projectsCache = new Map<string, { data: Project[]; timestamp: number; inFlight?: Promise<Project[]> }>();
 
+// --- Validation helpers ---
+function normalizeBaseUrl(url?: string): string | undefined {
+    if (!url) return undefined;
+    const trimmed = url.trim();
+    if (trimmed.endsWith('/api')) return trimmed; // correct
+    if (trimmed.endsWith('/api/')) return trimmed.slice(0, -1); // normalize trailing slash
+    return undefined; // invalid according to our rule
+}
+
 // --- Action Registration ---
 const toggleAction = new ToggleProjectAction();
 streamDeck.actions.registerAction(toggleAction);
@@ -121,10 +130,11 @@ async function initializeApiClient(settings: GlobalSettings): Promise<void> {
         pollingInterval = undefined;
     }
 
-    if (settings.solidtimeBaseUrl && settings.accessToken) {
+    const normalizedBaseUrl = normalizeBaseUrl(settings.solidtimeBaseUrl);
+    if (normalizedBaseUrl && settings.accessToken) {
         streamDeck.logger.info("Valid global settings found, initializing API client.");
         apiClient = new ApiClient({
-            baseUrl: settings.solidtimeBaseUrl,
+            baseUrl: normalizedBaseUrl,
             accessToken: settings.accessToken,
         });
         
@@ -148,7 +158,13 @@ async function initializeApiClient(settings: GlobalSettings): Promise<void> {
         await ensureMemberships(true);
         pollingInterval = setInterval(pollActiveTimer, 5000);
     } else {
-        streamDeck.logger.warn("Global settings are incomplete, API client not initialized.");
+        if (!settings.solidtimeBaseUrl) {
+            streamDeck.logger.warn("Global settings missing base URL, API client not initialized.");
+        } else if (!normalizeBaseUrl(settings.solidtimeBaseUrl)) {
+            streamDeck.logger.warn("Solidtime URL must end with '/api'. API client not initialized.");
+        } else if (!settings.accessToken) {
+            streamDeck.logger.warn("Global settings missing access token, API client not initialized.");
+        }
         apiClient = undefined;
         activeTimeEntry = undefined;
         await toggleAction.updateAllButtonStates(undefined);
@@ -160,11 +176,12 @@ async function initializeApiClient(settings: GlobalSettings): Promise<void> {
 streamDeck.settings.onDidReceiveGlobalSettings(async (ev: DidReceiveGlobalSettingsEvent<GlobalSettings>) => {
     streamDeck.logger.info("Global settings were updated by the UI.");
     const newSettings = ev.settings;
+    const normalizedBaseUrl = normalizeBaseUrl(newSettings.solidtimeBaseUrl);
 
     // Check if credentials have changed, requiring a full re-initialization.
     const credentialsChanged = !apiClient || (
         // Comparing current vs new to decide re-init
-        (apiClient as any)['options'].baseUrl !== newSettings.solidtimeBaseUrl ||
+        (apiClient as any)['options'].baseUrl !== normalizedBaseUrl ||
         (apiClient as any)['options'].accessToken !== newSettings.accessToken
     );
 
