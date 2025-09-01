@@ -9,11 +9,11 @@ const RUNNING_STATE = 1;
 
 // Define the shape of the context object passed from the main plugin file.
 type PluginContext = {
-    organizationId: string;
-    memberId: string;
     triggerPoll: () => void;
     triggerRefresh: () => Promise<void>;
     getActiveTimeEntry: () => TimeEntry | undefined;
+    getProjectsForOrg: (orgId: string, opts?: { refresh?: boolean }) => Promise<Project[]>;
+    getMemberIdForOrg: (orgId: string) => string | undefined;
 };
 
 /**
@@ -51,13 +51,12 @@ function formatElapsedTime(totalSeconds: number): string {
 export class ToggleProjectAction extends SingletonAction<ActionSettings> {
     // Properties to hold the shared API client and data from the main plugin.
     private apiClient?: ApiClient;
-    private projects: Project[] = [];
     private memberships: Membership[] = [];
-    private organizationId?: string;
-    private memberId?: string;
     private triggerPoll?: () => void;
     private triggerRefresh?: () => Promise<void>;
     private getActiveTimeEntry?: () => TimeEntry | undefined;
+    private getProjectsForOrg?: (orgId: string, opts?: { refresh?: boolean }) => Promise<Project[]>;
+    private getMemberIdForOrg?: (orgId: string) => string | undefined;
 
     // A cache to store the last title set for each button, preventing unnecessary updates and flickering.
     private lastTitles: Map<string, string> = new Map();
@@ -68,20 +67,16 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
         this.apiClient = apiClient;
     }
 
-    public setProjects(projects: Project[]): void {
-        this.projects = projects;
-    }
-
     public setMemberships(memberships: Membership[]): void {
         this.memberships = memberships;
     }
 
     public setContext(context: PluginContext): void {
-        this.organizationId = context.organizationId;
-        this.memberId = context.memberId;
         this.triggerPoll = context.triggerPoll;
         this.triggerRefresh = context.triggerRefresh;
         this.getActiveTimeEntry = context.getActiveTimeEntry;
+        this.getProjectsForOrg = context.getProjectsForOrg;
+        this.getMemberIdForOrg = context.getMemberIdForOrg;
     }
 
     // --- Title and State Update Logic ---
@@ -90,7 +85,7 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
      * Calculates and sets the title for a given action based on its settings and the current running timer.
      */
     private async updateTitle(action: KeyAction<ActionSettings>, settings: ActionSettings, activeEntry: TimeEntry | undefined): Promise<void> {
-        const { projectId, showElapsedTime = true, titleOverride } = settings;
+        const { projectId, organizationId, showElapsedTime = true, titleOverride } = settings;
 
         if (!projectId) {
             this.conditionallySetTitle(action, '');
@@ -101,8 +96,17 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
 
         let baseTitle = titleOverride || '';
         if (!baseTitle) {
-            const project = this.projects.find(p => p.id === projectId);
-            baseTitle = project ? project.name : '';
+            let projectName = '';
+            if (organizationId && this.getProjectsForOrg) {
+                try {
+                    const projects = await this.getProjectsForOrg(organizationId);
+                    const project = projects.find(p => p.id === projectId);
+                    projectName = project ? project.name : '';
+                } catch {
+                    projectName = '';
+                }
+            }
+            baseTitle = projectName;
         }
 
         let finalTitle = baseTitle;
@@ -169,15 +173,27 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
      * The core logic that runs when a user presses a key.
      */
     override async onKeyDown(ev: KeyDownEvent<ActionSettings>): Promise<void> {
-        if (!this.apiClient || !this.organizationId || !this.memberId) {
+        if (!this.apiClient) {
             streamDeck.logger.warn("Key pressed before plugin was configured.");
             ev.action.showAlert();
             return;
         }
 
-        const { projectId, billable = true } = ev.payload.settings;
+        const { projectId, organizationId, billable = true } = ev.payload.settings;
         if (!projectId) {
             streamDeck.logger.info("Key pressed on a button with no project assigned.");
+            return;
+        }
+        if (!organizationId) {
+            streamDeck.logger.warn("No organization selected for this button.");
+            ev.action.showAlert();
+            return;
+        }
+
+        const memberId = this.getMemberIdForOrg ? this.getMemberIdForOrg(organizationId) : undefined;
+        if (!memberId) {
+            streamDeck.logger.error(`No membership found for org ${organizationId}.`);
+            ev.action.showAlert();
             return;
         }
 
@@ -195,14 +211,15 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
             const nowWithoutMilliseconds = now.split('.')[0] + 'Z';
 
             if (isThisProjectRunning) {
-                await this.apiClient.stopTimeEntry(this.organizationId, activeEntry!.id, { end: nowWithoutMilliseconds });
+                // Stop in the org where the active entry is running (could be different)
+                await this.apiClient.stopTimeEntry(activeEntry!.organization_id, activeEntry!.id, { end: nowWithoutMilliseconds });
             } else {
                 if (activeEntry) {
-                    await this.apiClient.stopTimeEntry(this.organizationId, activeEntry.id, { end: nowWithoutMilliseconds });
+                    await this.apiClient.stopTimeEntry(activeEntry.organization_id, activeEntry.id, { end: nowWithoutMilliseconds });
                 }
                 
-                await this.apiClient.startTimeEntry(this.organizationId, {
-                    member_id: this.memberId,
+                await this.apiClient.startTimeEntry(organizationId, {
+                    member_id: memberId,
                     project_id: projectId,
                     start: nowWithoutMilliseconds,
                     billable: billable
@@ -260,20 +277,23 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
 
         // Handle the request for the project list
         if (ev.payload.event === "getProjects") {
-            if (this.triggerRefresh && "isRefresh" in ev.payload && ev.payload.isRefresh === true) {
-                streamDeck.logger.info("Refresh triggered from UI. Fetching new project list...");
-                await this.triggerRefresh();
+            const settings = await ev.action.getSettings();
+            const orgId = settings?.organizationId;
+            const isRefresh = "isRefresh" in ev.payload && (ev.payload as any).isRefresh === true;
+
+            if (!orgId || !this.getProjectsForOrg) {
+                streamDeck.ui.current?.sendToPropertyInspector({ event: "getProjects", items: [] });
+                return;
             }
 
-            const projectItems = this.projects.map(project => ({
-                label: project.name,
-                value: project.id
-            }));
+            if (this.triggerRefresh && isRefresh) {
+                // Forcing org projects refresh only
+                await this.getProjectsForOrg(orgId, { refresh: true });
+            }
 
-            streamDeck.ui.current?.sendToPropertyInspector({
-                event: "getProjects",
-                items: projectItems
-            });
+            const projects = await this.getProjectsForOrg(orgId);
+            const projectItems = projects.map(project => ({ label: project.name, value: project.id }));
+            streamDeck.ui.current?.sendToPropertyInspector({ event: "getProjects", items: projectItems });
         }
     }
 }

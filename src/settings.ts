@@ -3,11 +3,11 @@
 export type GlobalSettings = {
     solidtimeBaseUrl?: string;
     accessToken?: string;
-    organizationId?: string;
 };
 
 // We will add Action-specific settings here later.
 export type ActionSettings = {
+    organizationId?: string;
     projectId?: string;
     billable?: boolean;
     showElapsedTime?: boolean;

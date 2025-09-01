@@ -9,13 +9,17 @@ streamDeck.logger.setLevel(LogLevel.DEBUG);
 
 // --- Plugin-wide State Management ---
 let apiClient: ApiClient | undefined;
-let organizationId: string | undefined;
-let memberId: string | undefined;
-let projects: Project[] = [];
-let memberships: Membership[] = [];
 let activeTimeEntry: TimeEntry | undefined;
 let pollingInterval: NodeJS.Timeout | undefined;
 let isPolling = false; // The lock to prevent overlapping polls.
+
+// Caches
+const MEMBERSHIP_TTL_MS = 60_000;
+const PROJECTS_TTL_MS = 60_000;
+
+let membershipsCache: { data: Membership[]; timestamp: number } | undefined;
+let membershipsInFlight: Promise<Membership[]> | undefined;
+const projectsCache = new Map<string, { data: Project[]; timestamp: number; inFlight?: Promise<Project[]> }>();
 
 // --- Action Registration ---
 const toggleAction = new ToggleProjectAction();
@@ -40,57 +44,75 @@ async function pollActiveTimer(): Promise<void> {
     isPolling = false; // Release the lock.
 }
 
-async function fetchProjectsForOrg(orgId: string): Promise<void> {
-    if (!apiClient) return;
+// --- Caching helpers ---
+async function ensureMemberships(force = false): Promise<Membership[]> {
+    if (!apiClient) return [];
 
-    try {
-        const projectsResponse = await apiClient.getActiveProjects(orgId);
-        projects = projectsResponse.data || [];
-        streamDeck.logger.info(`Fetched ${projects.length} active projects for org ${orgId}.`);
-        toggleAction.setProjects(projects);
-
-        // The UI will now request this data when it needs it, so no broadcast is needed here.
-
-    } catch (error) {
-        streamDeck.logger.error(`Failed to fetch projects for org ${orgId}:`, error);
-        projects = [];
-        toggleAction.setProjects([]);
+    const now = Date.now();
+    if (!force && membershipsCache && now - membershipsCache.timestamp < MEMBERSHIP_TTL_MS) {
+        return membershipsCache.data;
     }
+    if (membershipsInFlight) {
+        return membershipsInFlight;
+    }
+    membershipsInFlight = (async () => {
+        try {
+            const res = await apiClient!.getMemberships();
+            const data = res.data || [];
+            membershipsCache = { data, timestamp: Date.now() };
+            toggleAction.setMemberships(data);
+            return data;
+        } catch (err) {
+            const msg = String(err);
+            if (msg.includes("401") || msg.includes("403")) {
+                membershipsCache = undefined;
+            }
+            streamDeck.logger.error("Failed to fetch memberships:", err);
+            return [];
+        } finally {
+            membershipsInFlight = undefined;
+        }
+    })();
+    return membershipsInFlight;
 }
 
-async function fetchInitialData(client: ApiClient): Promise<void> {
-    streamDeck.logger.info("Fetching initial data from Solidtime API...");
-    try {
-        const settings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
-        const membershipsResponse = await client.getMemberships();
-        memberships = membershipsResponse.data || [];
-        toggleAction.setMemberships(memberships); // Provide memberships to the action
-
-        if (memberships.length > 0) {
-            let currentOrgId = settings.organizationId;
-            
-            // Auto-select the first organization if none is currently set.
-            if (!currentOrgId || !memberships.some(m => m.organization.id === currentOrgId)) {
-                currentOrgId = memberships[0].organization.id;
-                streamDeck.logger.info(`No organization selected or previous one invalid. Auto-selecting first: ${currentOrgId}`);
-                // Save it back to settings. This will trigger onDidReceiveGlobalSettings to fetch projects.
-                await streamDeck.settings.setGlobalSettings({ ...settings, organizationId: currentOrgId });
-            } else {
-                 // If an org is already selected, proceed with it.
-                 organizationId = currentOrgId;
-                 memberId = memberships.find(m => m.organization.id === organizationId)?.id;
-                 await fetchProjectsForOrg(organizationId);
-            }
-        } else {
-            streamDeck.logger.warn("User does not appear to be part of any organization.");
-            return;
-        }
-    } catch (error) {
-        streamDeck.logger.error("An error occurred while fetching initial data. Resetting state.");
-        console.error(error);
-        activeTimeEntry = undefined;
-        await toggleAction.updateAllButtonStates(undefined);
+async function ensureProjectsForOrg(orgId: string, force = false): Promise<Project[]> {
+    if (!apiClient) return [];
+    const entry = projectsCache.get(orgId);
+    const now = Date.now();
+    if (!force && entry && now - entry.timestamp < PROJECTS_TTL_MS) {
+        return entry.data;
     }
+    if (entry?.inFlight) {
+        return entry.inFlight;
+    }
+    const inFlight = (async () => {
+        try {
+            const res = await apiClient!.getActiveProjects(orgId);
+            const data = res.data || [];
+            projectsCache.set(orgId, { data, timestamp: Date.now() });
+            return data;
+        } catch (err) {
+            const msg = String(err);
+            if (msg.includes("401") || msg.includes("403")) {
+                projectsCache.delete(orgId);
+            }
+            streamDeck.logger.error(`Failed to fetch projects for org ${orgId}:`, err);
+            return [];
+        } finally {
+            const current = projectsCache.get(orgId);
+            if (current) {
+                delete current.inFlight;
+            }
+        }
+    })();
+    projectsCache.set(orgId, { data: entry?.data || [], timestamp: entry?.timestamp || 0, inFlight });
+    return inFlight;
+}
+
+function getMemberIdForOrg(orgId: string): string | undefined {
+    const memberships = membershipsCache?.data || [];
+    return memberships.find(m => m.organization.id === orgId)?.id;
 }
 
 async function initializeApiClient(settings: GlobalSettings): Promise<void> {
@@ -106,8 +128,24 @@ async function initializeApiClient(settings: GlobalSettings): Promise<void> {
             accessToken: settings.accessToken,
         });
         
+        // Set the API client and provide context hooks
         toggleAction.setApiClient(apiClient);
-        await fetchInitialData(apiClient);
+        toggleAction.setContext({
+            triggerPoll: pollActiveTimer,
+            triggerRefresh: async () => {
+                // Force refresh memberships and clear projects cache
+                await ensureMemberships(true);
+                projectsCache.clear();
+            },
+            getActiveTimeEntry: () => activeTimeEntry,
+            getProjectsForOrg: async (orgId: string, opts?: { refresh?: boolean }) => {
+                return ensureProjectsForOrg(orgId, Boolean(opts?.refresh));
+            },
+            getMemberIdForOrg: (orgId: string) => getMemberIdForOrg(orgId),
+        });
+
+        // Prime memberships cache
+        await ensureMemberships(true);
         pollingInterval = setInterval(pollActiveTimer, 5000);
     } else {
         streamDeck.logger.warn("Global settings are incomplete, API client not initialized.");
@@ -121,41 +159,17 @@ async function initializeApiClient(settings: GlobalSettings): Promise<void> {
 
 streamDeck.settings.onDidReceiveGlobalSettings(async (ev: DidReceiveGlobalSettingsEvent<GlobalSettings>) => {
     streamDeck.logger.info("Global settings were updated by the UI.");
-    
     const newSettings = ev.settings;
-    const oldOrgId = organizationId;
-    const newOrgId = newSettings.organizationId;
 
     // Check if credentials have changed, requiring a full re-initialization.
     const credentialsChanged = !apiClient || (
-        apiClient['options'].baseUrl !== newSettings.solidtimeBaseUrl ||
-        apiClient['options'].accessToken !== newSettings.accessToken
+        // Comparing current vs new to decide re-init
+        (apiClient as any)['options'].baseUrl !== newSettings.solidtimeBaseUrl ||
+        (apiClient as any)['options'].accessToken !== newSettings.accessToken
     );
 
     if (credentialsChanged) {
         await initializeApiClient(newSettings);
-        return;
-    }
-
-    // If only the organization has changed, fetch new projects for it.
-    if (newOrgId && newOrgId !== oldOrgId) {
-        streamDeck.logger.info(`Organization changed from ${oldOrgId} to ${newOrgId}. Fetching new projects.`);
-        organizationId = newOrgId;
-        memberId = memberships.find(m => m.organization.id === organizationId)?.id;
-        
-        if (memberId) {
-            // Update the context for the action
-            toggleAction.setContext({
-                organizationId: organizationId,
-                memberId: memberId,
-                triggerPoll: pollActiveTimer,
-                triggerRefresh: () => fetchInitialData(apiClient!),
-                getActiveTimeEntry: () => activeTimeEntry
-            });
-            await fetchProjectsForOrg(newOrgId);
-        } else {
-            streamDeck.logger.error(`Could not find memberId for organization ${newOrgId}`);
-        }
     }
 });
 

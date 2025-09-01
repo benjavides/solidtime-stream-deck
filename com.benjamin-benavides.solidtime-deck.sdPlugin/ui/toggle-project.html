@@ -43,7 +43,6 @@
         <div class="flex-container">
             <div class="flex-grow">
                 <sdpi-select
-                    global
                     id="org-select"
                     setting="organizationId"
                     datasource="getOrganizations"
@@ -56,6 +55,7 @@
                 <sdpi-button id="org-refresh-btn">Refresh</sdpi-button>
             </div>
         </div>
+        <sdpi-note id="org-warning" style="display:none; margin-top:6px;">No organizations found. Check URL/Token and refresh.</sdpi-note>
     </sdpi-item>
 
     <sdpi-item label="Project">
@@ -66,13 +66,15 @@
                     setting="projectId"
                     datasource="getProjects"
                     loading="Fetching projects..."
-                    placeholder="Select a project">
+                    placeholder="Select a project"
+                    disabled>
                 </sdpi-select>
             </div>
             <div class="flex-shrink">
-                <sdpi-button id="project-refresh-btn">Refresh</sdpi-button>
+                <sdpi-button id="project-refresh-btn" disabled>Refresh</sdpi-button>
             </div>
         </div>
+        <sdpi-note id="project-warning" style="display:none; margin-top:6px;">Previously selected project is no longer available. Please reselect.</sdpi-note>
     </sdpi-item>
     
     <sdpi-item label="Title Display" title="Configure the button's title text and timer visibility.">
@@ -97,23 +99,84 @@
             const orgSelect = document.getElementById('org-select');
             const orgRefreshBtn = document.getElementById('org-refresh-btn');
             const projectRefreshBtn = document.getElementById('project-refresh-btn');
+            const orgWarning = document.getElementById('org-warning');
+            const projectWarning = document.getElementById('project-warning');
+
+            function setProjectEnabled(enabled) {
+                if (!projectSelect || !projectRefreshBtn) return;
+                if (enabled) {
+                    projectSelect.removeAttribute('disabled');
+                    projectSelect.disabled = false;
+                    projectRefreshBtn.removeAttribute('disabled');
+                    projectRefreshBtn.disabled = false;
+                } else {
+                    projectSelect.setAttribute('disabled', '');
+                    projectSelect.disabled = true;
+                    projectRefreshBtn.setAttribute('disabled', '');
+                    projectRefreshBtn.disabled = true;
+                }
+            }
 
             if (orgRefreshBtn && orgSelect) {
-                orgRefreshBtn.addEventListener('click', () => {
+                orgRefreshBtn.addEventListener('click', async () => {
+                    try { await window.streamDeck?.plugin?.sendToPlugin({ event: 'getOrganizations', isRefresh: true }); } catch {}
                     orgSelect.refresh();
                 });
             }
-            
+
             if (projectRefreshBtn && projectSelect) {
-                projectRefreshBtn.addEventListener('click', () => {
+                projectRefreshBtn.addEventListener('click', async () => {
+                    try { await window.streamDeck?.plugin?.sendToPlugin({ event: 'getProjects', isRefresh: true }); } catch {}
                     projectSelect.refresh();
                 });
             }
 
-            // When the organization selection changes, automatically refresh the project list.
-            if (orgSelect && projectSelect) {
-                orgSelect.addEventListener('change', () => {
-                    projectSelect.refresh();
+            // When the organization selection changes, reset the project, enable dropdown, and refresh list.
+            function onOrgChanged() {
+                // Enable project controls when an org is selected/changed.
+                setProjectEnabled(true);
+                if (projectSelect) {
+                    // Clear the bound setting for projectId
+                    try { projectSelect.value = ''; } catch {}
+                    try { projectSelect.dispatchEvent(new Event('change')); } catch {}
+                    // Delay refresh slightly to allow settings binding to persist organizationId
+                    setTimeout(() => { try { projectSelect.refresh(); } catch {} }, 100);
+                }
+            }
+            if (orgSelect) {
+                orgSelect.addEventListener('change', onOrgChanged);
+                orgSelect.addEventListener('input', onOrgChanged);
+                orgSelect.addEventListener('sdpi-change', onOrgChanged);
+            }
+
+            // After components initialize, toggle availability based on current organization selection.
+            setTimeout(() => {
+                const hasOrg = !!(orgSelect && (orgSelect.value || orgSelect.getAttribute('value')));
+                setProjectEnabled(hasOrg);
+            }, 200);
+
+            // Listen for plugin messages to surface warnings (empty orgs or missing project)
+            if (window.streamDeck && window.streamDeck.plugin) {
+                window.streamDeck.plugin.onSendToPropertyInspector((ev) => {
+                    if (!ev || !ev.payload) return;
+                    if (ev.payload.event === 'getOrganizations') {
+                        const items = ev.payload.items || [];
+                        if (orgWarning) orgWarning.style.display = (items.length === 0) ? '' : 'none';
+                    }
+                    if (ev.payload.event === 'getProjects') {
+                        const items = ev.payload.items || [];
+                        if (projectWarning) {
+                            // If a project is set but not in the list, show warning
+                            (async () => {
+                                try {
+                                    const settings = await ev.action.getSettings();
+                                    const current = settings && settings.projectId;
+                                    const exists = !!items.find(i => i.value === current);
+                                    projectWarning.style.display = (current && !exists) ? '' : 'none';
+                                } catch {}
+                            })();
+                        }
+                    }
                 });
             }
         });
