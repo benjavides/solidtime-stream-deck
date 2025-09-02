@@ -49,7 +49,7 @@
                     setting="organizationId"
                     datasource="getOrganizations"
                     loading="Fetching..."
-                    placeholder="Enter credentials first">
+                    placeholder="Select an organization">
                 </sdpi-select>
             </div>
             <div class="flex-shrink">
@@ -79,6 +79,27 @@
         <sdpi-note id="project-warning" style="display:none; margin-top:6px;">Previously selected project is no longer available. Please reselect.</sdpi-note>
     </sdpi-item>
 
+    <sdpi-item label="Tags">
+        <div class="flex-container">
+            <div class="flex-grow">
+                <sdpi-checkbox-list
+                    id="tags-list"
+                    setting="tagIds"
+                    datasource="getTags"
+                    loading="Fetching tags..."
+                    disabled>
+                </sdpi-checkbox-list>
+            </div>
+            <div class="flex-shrink">
+                <sdpi-button id="tags-refresh-btn" disabled>Refresh</sdpi-button>
+            </div>
+        </div>
+        <sdpi-note id="tags-helper" style="display:none; margin-top:6px;">Select an organization to choose tags.</sdpi-note>
+        <sdpi-note id="tags-empty" style="display:none; margin-top:6px;">No tags found for this organization.</sdpi-note>
+        <sdpi-note id="tags-removed-warning" style="display:none; margin-top:6px;">Some previously selected tags are no longer available and were removed.</sdpi-note>
+        <sdpi-note id="tags-error" style="display:none; margin-top:6px;">Failed to update tags on the running entry.</sdpi-note>
+    </sdpi-item>
+
     <sdpi-item label="Billable" title="Mark time entries as billable by default for this project.">
         <sdpi-checkbox setting="billable" default="true"></sdpi-checkbox>
     </sdpi-item>
@@ -102,8 +123,14 @@
             const orgSelect = document.getElementById('org-select');
             const orgRefreshBtn = document.getElementById('org-refresh-btn');
             const projectRefreshBtn = document.getElementById('project-refresh-btn');
+            const tagsList = document.getElementById('tags-list');
+            const tagsRefreshBtn = document.getElementById('tags-refresh-btn');
             const orgWarning = document.getElementById('org-warning');
             const projectWarning = document.getElementById('project-warning');
+            const tagsHelper = document.getElementById('tags-helper');
+            const tagsEmpty = document.getElementById('tags-empty');
+            const tagsRemovedWarning = document.getElementById('tags-removed-warning');
+            const tagsError = document.getElementById('tags-error');
             const baseUrlInput = document.getElementById('base-url-input');
             const baseUrlWarning = document.getElementById('base-url-warning');
 
@@ -135,6 +162,21 @@
                 }
             }
 
+            function setTagsEnabled(enabled) {
+                if (!tagsList || !tagsRefreshBtn) return;
+                if (enabled) {
+                    tagsList.removeAttribute('disabled');
+                    tagsList.disabled = false;
+                    tagsRefreshBtn.removeAttribute('disabled');
+                    tagsRefreshBtn.disabled = false;
+                } else {
+                    tagsList.setAttribute('disabled', '');
+                    tagsList.disabled = true;
+                    tagsRefreshBtn.setAttribute('disabled', '');
+                    tagsRefreshBtn.disabled = true;
+                }
+            }
+
             if (orgRefreshBtn && orgSelect) {
                 orgRefreshBtn.addEventListener('click', async () => {
                     try { await window.streamDeck?.plugin?.sendToPlugin({ event: 'getOrganizations', isRefresh: true }); } catch {}
@@ -149,16 +191,43 @@
                 });
             }
 
+            if (tagsRefreshBtn && tagsList) {
+                tagsRefreshBtn.addEventListener('click', async () => {
+                    try { await window.streamDeck?.plugin?.sendToPlugin({ event: 'getTags', isRefresh: true }); } catch {}
+                    try { tagsList.refresh?.(); } catch {}
+                });
+            }
+
             // When the organization selection changes, reset the project, enable dropdown, and refresh list.
             function onOrgChanged() {
-                // Enable project controls when an org is selected/changed.
-                setProjectEnabled(true);
+                const hasOrg = !!(orgSelect && orgSelect.value);
+                // Enable/disable based on presence of org selection.
+                setProjectEnabled(hasOrg);
+                setTagsEnabled(false);
+                if (tagsHelper) tagsHelper.style.display = hasOrg ? 'none' : '';
+                if (!hasOrg) {
+                    if (projectSelect) {
+                        try { projectSelect.value = ''; } catch {}
+                        try { projectSelect.dispatchEvent(new Event('change')); } catch {}
+                    }
+                    if (tagsList) {
+                        try { tagsList.value = []; } catch {}
+                        try { tagsList.dispatchEvent(new Event('change')); } catch {}
+                    }
+                    return;
+                }
                 if (projectSelect) {
                     // Clear the bound setting for projectId
                     try { projectSelect.value = ''; } catch {}
                     try { projectSelect.dispatchEvent(new Event('change')); } catch {}
                     // Delay refresh slightly to allow settings binding to persist organizationId
                     setTimeout(() => { try { projectSelect.refresh(); } catch {} }, 100);
+                }
+                if (tagsList) {
+                    // Clear the bound setting for tagIds
+                    try { tagsList.value = []; } catch {}
+                    try { tagsList.dispatchEvent(new Event('change')); } catch {}
+                    setTimeout(() => { try { tagsList.refresh?.(); setTagsEnabled(true); } catch {} }, 200);
                 }
             }
             if (orgSelect) {
@@ -171,6 +240,8 @@
             setTimeout(() => {
                 const hasOrg = !!(orgSelect && (orgSelect.value || orgSelect.getAttribute('value')));
                 setProjectEnabled(hasOrg);
+                setTagsEnabled(hasOrg);
+                if (tagsHelper) tagsHelper.style.display = hasOrg ? 'none' : '';
             }, 200);
 
             // Listen for plugin messages to surface warnings (empty orgs or missing project)
@@ -193,6 +264,35 @@
                                     projectWarning.style.display = (current && !exists) ? '' : 'none';
                                 } catch {}
                             })();
+                        }
+                    }
+
+                    if (ev.payload.event === 'getTags') {
+                        const items = ev.payload.items || [];
+                        if (tagsEmpty) tagsEmpty.style.display = (items.length === 0) ? '' : 'none';
+                        if (tagsRemovedWarning) tagsRemovedWarning.style.display = 'none';
+
+                        // Check if selected tags still exist; if not, unset missing and warn
+                        (async () => {
+                            try {
+                                const settings = await ev.action.getSettings();
+                                const selected = Array.isArray(settings.tagIds) ? settings.tagIds : (settings.tagIds ? [settings.tagIds] : []);
+                                const validSet = new Set((items || []).map(i => i.value));
+                                const filtered = selected.filter(id => validSet.has(id));
+                                const removedCount = selected.length - filtered.length;
+                                if (removedCount > 0) {
+                                    try { await ev.action.setSettings({ ...settings, tagIds: filtered }); } catch {}
+                                    tagsRemovedWarning.style.display = '';
+                                }
+                            } catch {}
+                        })();
+                    }
+
+                    if (ev.payload.event === 'tagsPatchError' || ev.payload.event === 'tagsFetchError') {
+                        if (tagsError) {
+                            if (ev.payload.message) tagsError.textContent = ev.payload.message;
+                            tagsError.style.display = '';
+                            setTimeout(() => { if (tagsError) tagsError.style.display = 'none'; }, 4000);
                         }
                     }
                 });

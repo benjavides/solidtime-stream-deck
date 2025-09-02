@@ -2,6 +2,7 @@ import {
     Membership,
     Paginated,
     Project,
+    Tag,
     Response as ApiResponse,
     TimeEntry,
     TimeEntryStartRequest,
@@ -80,6 +81,19 @@ export class ApiClient {
     }
 
     /**
+     * A generic method to perform a PATCH request.
+     */
+    private async patch<T>(path: string, body: unknown): Promise<T> {
+        const url = `${this.options.baseUrl}${path}`;
+        const response = await fetch(url, {
+            method: 'PATCH',
+            headers: this.getHeaders(),
+            body: JSON.stringify(body),
+        });
+        return this.handleResponse<T>(response);
+    }
+
+    /**
      * Handles the response from the fetch call, checking for errors.
      */
     private async handleResponse<T>(response: globalThis.Response): Promise<T> {
@@ -144,5 +158,26 @@ export class ApiClient {
      */
     public stopTimeEntry(organizationId: string, timeEntryId: string, data: TimeEntryStopRequest): Promise<ApiResponse<TimeEntry>> {
         return this.put(`/v1/organizations/${organizationId}/time-entries/${timeEntryId}`, data);
+    }
+
+    /**
+     * Lists tags for an organization.
+     * GET /v1/organizations/{organization}/tags
+     */
+    public getTags(organizationId: string): Promise<ApiResponse<Tag[]>> {
+        return this.get(`/v1/organizations/${organizationId}/tags`);
+    }
+
+    /**
+     * Patches one or more time entries for an organization.
+     * PATCH /v1/organizations/{organization}/time-entries
+     * Note: Do not log tag IDs or sensitive payload details.
+     */
+    public patchTimeEntries(
+        organizationId: string,
+        ids: string[],
+        changes: Partial<{ tags: string[] }>
+    ): Promise<ApiResponse<TimeEntry[]>> {
+        return this.patch(`/v1/organizations/${organizationId}/time-entries`, { ids, changes });
     }
 }

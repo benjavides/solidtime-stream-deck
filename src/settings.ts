@@ -12,4 +12,5 @@ export type ActionSettings = {
     billable?: boolean;
     showElapsedTime?: boolean;
     titleOverride?: string;
+    tagIds?: string[]; // selected tag IDs (multi-select)
 };

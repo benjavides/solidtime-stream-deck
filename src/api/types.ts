@@ -79,3 +79,11 @@ export type TimeEntryStartRequest = {
 export type TimeEntryStopRequest = {
     end: string; // ISO 8601 string
 };
+
+// New type: Tag
+export type Tag = {
+    id: string;
+    name: string;
+    created_at: string;
+    updated_at: string;
+};

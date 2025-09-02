@@ -1,6 +1,6 @@
 import { action, SendToPluginEvent, WillAppearEvent, WillDisappearEvent, JsonValue, SingletonAction, streamDeck, KeyDownEvent, DidReceiveSettingsEvent, KeyAction } from "@elgato/streamdeck";
 import { ApiClient } from "../api/client";
-import { Project, TimeEntry, Membership } from "../api/types";
+import { Project, TimeEntry, Membership, Tag } from "../api/types";
 import { ActionSettings } from "../settings";
 
 // Define constants for the two states from the manifest for readability.
@@ -14,6 +14,7 @@ type PluginContext = {
     getActiveTimeEntry: () => TimeEntry | undefined;
     getProjectsForOrg: (orgId: string, opts?: { refresh?: boolean }) => Promise<Project[]>;
     getMemberIdForOrg: (orgId: string) => string | undefined;
+    getTagsForOrg: (orgId: string, opts?: { refresh?: boolean }) => Promise<Tag[]>;
 };
 
 /**
@@ -57,9 +58,11 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
     private getActiveTimeEntry?: () => TimeEntry | undefined;
     private getProjectsForOrg?: (orgId: string, opts?: { refresh?: boolean }) => Promise<Project[]>;
     private getMemberIdForOrg?: (orgId: string) => string | undefined;
+    private getTagsForOrg?: (orgId: string, opts?: { refresh?: boolean }) => Promise<Tag[]>;
 
     // A cache to store the last title set for each button, preventing unnecessary updates and flickering.
     private lastTitles: Map<string, string> = new Map();
+    private lastSettingsByActionId: Map<string, ActionSettings> = new Map();
 
     // --- Public Methods for Plugin Control ---
 
@@ -77,6 +80,7 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
         this.getActiveTimeEntry = context.getActiveTimeEntry;
         this.getProjectsForOrg = context.getProjectsForOrg;
         this.getMemberIdForOrg = context.getMemberIdForOrg;
+        this.getTagsForOrg = context.getTagsForOrg;
     }
 
     // --- Title and State Update Logic ---
@@ -165,8 +169,58 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
      */
     override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<ActionSettings>): Promise<void> {
         if (!ev.action.isKey()) return;
+
+        const newSettings = ev.payload.settings || {};
+        const prev = this.lastSettingsByActionId.get(ev.action.id) || {};
+
+        // Normalize tagIds to string[]
+        const normalizeTagIds = (v: any): string[] | undefined => {
+            if (Array.isArray(v)) return v.filter(Boolean).map(String);
+            if (v == null) return undefined;
+            // handle single value
+            if (typeof v === 'string') return v ? [v] : [];
+            return undefined;
+        };
+        const prevTagIds = normalizeTagIds((prev as any).tagIds) || [];
+        const newTagIds = normalizeTagIds((newSettings as any).tagIds) || [];
+
+        // If organization changed, clear tagIds to avoid cross-org tags lingering
+        const orgChanged = prev.organizationId && newSettings.organizationId && prev.organizationId !== newSettings.organizationId;
+        if (orgChanged && newTagIds.length > 0) {
+            try {
+                await ev.action.setSettings({ ...newSettings, tagIds: [] });
+            } catch {}
+        }
+
+        // If tags changed and the corresponding entry is running for same org+project, patch tags
+        const tagsChanged = JSON.stringify(prevTagIds.slice().sort()) !== JSON.stringify(newTagIds.slice().sort());
+        if (tagsChanged && this.apiClient) {
+            const activeEntry = this.getActiveTimeEntry ? this.getActiveTimeEntry() : undefined;
+            if (
+                activeEntry &&
+                newSettings.projectId &&
+                newSettings.organizationId &&
+                activeEntry.project_id === newSettings.projectId &&
+                activeEntry.organization_id === newSettings.organizationId
+            ) {
+                try {
+                    // Do not log payload; keep logs high-level
+                    await this.apiClient.patchTimeEntries(newSettings.organizationId, [activeEntry.id], { tags: newTagIds });
+                } catch (err) {
+                    streamDeck.logger.error('Failed to patch tags for active entry.');
+                    // Non-blocking PI error message
+                    streamDeck.ui.current?.sendToPropertyInspector({
+                        event: 'tagsPatchError',
+                        message: 'Failed to update tags on the running entry.'
+                    });
+                }
+            }
+        }
+
+        // Cache latest settings for next diff and update title
+        this.lastSettingsByActionId.set(ev.action.id, { ...newSettings, tagIds: newTagIds });
         const activeEntry = this.getActiveTimeEntry ? this.getActiveTimeEntry() : undefined;
-        await this.updateTitle(ev.action, ev.payload.settings, activeEntry);
+        await this.updateTitle(ev.action, newSettings, activeEntry);
     }
     
     /**
@@ -222,7 +276,9 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
                     member_id: memberId,
                     project_id: projectId,
                     start: nowWithoutMilliseconds,
-                    billable: billable
+                    billable: billable,
+                    // include selected tag IDs on start; avoid logging sensitive details elsewhere
+                    tags: Array.isArray(ev.payload.settings.tagIds) ? ev.payload.settings.tagIds : []
                 });
             }
         } catch (error) {
@@ -294,6 +350,26 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
             const projects = await this.getProjectsForOrg(orgId);
             const projectItems = projects.map(project => ({ label: project.name, value: project.id }));
             streamDeck.ui.current?.sendToPropertyInspector({ event: "getProjects", items: projectItems });
+        }
+
+        // Handle the request for the tags list
+        if (ev.payload.event === "getTags") {
+            const settings = await ev.action.getSettings();
+            const orgId = settings?.organizationId;
+            const isRefresh = "isRefresh" in ev.payload && (ev.payload as any).isRefresh === true;
+
+            if (!orgId || !this.getTagsForOrg) {
+                streamDeck.ui.current?.sendToPropertyInspector({ event: "getTags", items: [] });
+                return;
+            }
+
+            if (isRefresh) {
+                await this.getTagsForOrg(orgId, { refresh: true });
+            }
+
+            const tags = await this.getTagsForOrg(orgId);
+            const tagItems = tags.map((tag: Tag) => ({ label: tag.name, value: tag.id }));
+            streamDeck.ui.current?.sendToPropertyInspector({ event: "getTags", items: tagItems });
         }
     }
 }

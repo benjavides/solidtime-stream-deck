@@ -2,7 +2,7 @@ import streamDeck, { DeviceDidConnectEvent, DidReceiveGlobalSettingsEvent, LogLe
 import { ApiClient } from "./api/client";
 import { ToggleProjectAction } from "./actions/toggle-project";
 import { GlobalSettings } from "./settings";
-import { Project, TimeEntry, Membership } from "./api/types";
+import { Project, TimeEntry, Membership, Tag } from "./api/types";
 
 // --- Setup ---
 streamDeck.logger.setLevel(LogLevel.DEBUG);
@@ -16,10 +16,12 @@ let isPolling = false; // The lock to prevent overlapping polls.
 // Caches
 const MEMBERSHIP_TTL_MS = 60_000;
 const PROJECTS_TTL_MS = 60_000;
+const TAGS_TTL_MS = 60_000;
 
 let membershipsCache: { data: Membership[]; timestamp: number } | undefined;
 let membershipsInFlight: Promise<Membership[]> | undefined;
 const projectsCache = new Map<string, { data: Project[]; timestamp: number; inFlight?: Promise<Project[]> }>();
+const tagsCache = new Map<string, { data: Tag[]; timestamp: number; inFlight?: Promise<Tag[]> }>();
 
 // --- Validation helpers ---
 function normalizeBaseUrl(url?: string): string | undefined {
@@ -119,6 +121,46 @@ async function ensureProjectsForOrg(orgId: string, force = false): Promise<Proje
     return inFlight;
 }
 
+async function ensureTagsForOrg(orgId: string, force = false): Promise<Tag[]> {
+    if (!apiClient) return [];
+    const entry = tagsCache.get(orgId);
+    const now = Date.now();
+    if (!force && entry && now - entry.timestamp < TAGS_TTL_MS) {
+        return entry.data;
+    }
+    if (entry?.inFlight) {
+        return entry.inFlight;
+    }
+    const inFlight = (async () => {
+        try {
+            const res = await apiClient!.getTags(orgId);
+            const data = res.data || [];
+            tagsCache.set(orgId, { data, timestamp: Date.now() });
+            return data;
+        } catch (err) {
+            const msg = String(err);
+            if (msg.includes("401") || msg.includes("403")) {
+                tagsCache.delete(orgId);
+            }
+            // Keep prior list if available
+            const prior = tagsCache.get(orgId)?.data || [];
+            streamDeck.logger.error(`Failed to fetch tags for org ${orgId}:`, err);
+            // Surface a non-blocking PI error
+            try {
+                (streamDeck.ui.current as any)?.sendToPropertyInspector?.({ event: 'tagsFetchError', message: 'Failed to fetch tags. Showing cached list if available.' });
+            } catch {}
+            return prior;
+        } finally {
+            const current = tagsCache.get(orgId);
+            if (current) {
+                delete current.inFlight;
+            }
+        }
+    })();
+    tagsCache.set(orgId, { data: entry?.data || [], timestamp: entry?.timestamp || 0, inFlight });
+    return inFlight;
+}
+
 function getMemberIdForOrg(orgId: string): string | undefined {
     const memberships = membershipsCache?.data || [];
     return memberships.find(m => m.organization.id === orgId)?.id;
@@ -146,12 +188,16 @@ async function initializeApiClient(settings: GlobalSettings): Promise<void> {
                 // Force refresh memberships and clear projects cache
                 await ensureMemberships(true);
                 projectsCache.clear();
+                tagsCache.clear();
             },
             getActiveTimeEntry: () => activeTimeEntry,
             getProjectsForOrg: async (orgId: string, opts?: { refresh?: boolean }) => {
                 return ensureProjectsForOrg(orgId, Boolean(opts?.refresh));
             },
             getMemberIdForOrg: (orgId: string) => getMemberIdForOrg(orgId),
+            getTagsForOrg: async (orgId: string, opts?: { refresh?: boolean }) => {
+                return ensureTagsForOrg(orgId, Boolean(opts?.refresh));
+            },
         });
 
         // Prime memberships cache
