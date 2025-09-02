@@ -171,6 +171,7 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
         if (!ev.action.isKey()) return;
 
         const newSettings = ev.payload.settings || {};
+        
         const prev = this.lastSettingsByActionId.get(ev.action.id) || {};
 
         // Normalize tagIds to string[]
@@ -184,12 +185,26 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
         const prevTagIds = normalizeTagIds((prev as any).tagIds) || [];
         const newTagIds = normalizeTagIds((newSettings as any).tagIds) || [];
 
-        // If organization changed, clear tagIds to avoid cross-org tags lingering
-        const orgChanged = prev.organizationId && newSettings.organizationId && prev.organizationId !== newSettings.organizationId;
-        if (orgChanged && newTagIds.length > 0) {
+        // If organization changed (including first set or clear), clear tagIds to avoid cross-org tags lingering
+        const prevOrg = (prev.organizationId ?? '');
+        const newOrg = (newSettings.organizationId ?? '');
+        const orgChanged = prevOrg !== newOrg;
+        if (orgChanged){
+            streamDeck.logger.info("Organization changed from {prevOrg} to {newOrg}", { prevOrg, newOrg });
+            if (newTagIds.length > 0) {
+                try {
+                    await ev.action.setSettings({ ...newSettings, tagIds: [] });
+                } catch {}
+            }
             try {
-                await ev.action.setSettings({ ...newSettings, tagIds: [] });
-            } catch {}
+                // Notify the specific PI for this action context
+                streamDeck.ui.current?.sendToPropertyInspector({
+                    event: "organizationChanged",
+                    organizationId: newOrg || ""
+                });
+              } catch (err) {
+                streamDeck.logger.error("Failed to send organizationChanged to PI", err);
+              }
         }
 
         // If tags changed and the corresponding entry is running for same org+project, patch tags

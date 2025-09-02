@@ -24,12 +24,17 @@
             margin-bottom: 14px;
         }
         .section-title {
+            font-family: Arial, Helvetica, sans-serif;
             font-weight: 600;
-            margin: 0 0 8px 0;
             font-size: 12px;
+            line-height: 16px;
+            margin: 0 0 8px 0;
             text-transform: uppercase;
-            letter-spacing: 0.04em;
-            opacity: 0.9;
+            letter-spacing: 0.06em;
+            color: rgba(255, 255, 255, 0.82);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            text-rendering: optimizeLegibility;
         }
     </style>
 </head>
@@ -180,21 +185,9 @@
                 } catch {}
             }
 
-            function validateBaseUrl() {
-                if (!baseUrlInput) return true;
-                const value = (baseUrlInput.value || '').trim();
-                const valid = value === '' || value.endsWith('/api');
-                if (baseUrlWarning) baseUrlWarning.style.display = valid ? 'none' : '';
-                // If the textfield supports invalid attribute, toggle it for visual feedback
-                try {
-                    if (!valid) { baseUrlInput.setAttribute('invalid', ''); }
-                    else { baseUrlInput.removeAttribute('invalid'); }
-                } catch {}
-                return valid;
-            }
-
             function setProjectEnabled(enabled) {
                 if (!projectSelect || !projectRefreshBtn) return;
+                devLog('setProjectEnabled()', { enabled });
                 if (enabled) {
                     projectSelect.removeAttribute('disabled');
                     projectSelect.disabled = false;
@@ -210,6 +203,7 @@
 
             function setTagsEnabled(enabled) {
                 if (!tagsList || !tagsRefreshBtn) return;
+                devLog('setTagsEnabled()', { enabled });
                 if (enabled) {
                     tagsList.removeAttribute('disabled');
                     tagsList.disabled = false;
@@ -231,54 +225,37 @@
 
             if (orgRefreshBtn && orgSelect) {
                 orgRefreshBtn.addEventListener('click', async () => {
-                    try { 
-                        await window.streamDeck?.plugin?.sendToPlugin({ event: 'getOrganizations', isRefresh: true }); 
-                        devLog('orgRefreshBtn clicked, sent refresh request');
-                    } catch {}
+                    devLog('orgRefreshBtn clicked, sent refresh request');
                     orgSelect.refresh();
                 });
             }
 
             if (projectRefreshBtn && projectSelect) {
                 projectRefreshBtn.addEventListener('click', async () => {
-                    try { 
-                        await window.streamDeck?.plugin?.sendToPlugin({ event: 'getProjects', isRefresh: true }); 
-                        devLog('projectRefreshBtn clicked, sent refresh request');
-                    } catch {}
+                    devLog('projectRefreshBtn clicked, sent refresh request');
                     projectSelect.refresh();
                 });
             }
 
             if (tagsRefreshBtn && tagsList) {
                 tagsRefreshBtn.addEventListener('click', async () => {
-                    try { 
-                        await window.streamDeck?.plugin?.sendToPlugin({ event: 'getTags', isRefresh: true }); 
-                        devLog('tagsRefreshBtn clicked, sent refresh request');
-                    } catch {}
-                    try { tagsList.refresh?.(); } catch {}
+                    devLog('tagsRefreshBtn clicked, sent refresh request');
+                    tagsList.refresh?.()
                 });
             }
 
             // When the organization selection changes, reset the project, enable dropdown, and refresh list.
             function onOrgChanged(ev) {
+                const newOrg = ev.target._value;
+                console.log(newOrg)
                 const hasOrg = !!(orgSelect && orgSelect.value);
+                
 
-                devLog('onOrgChanged()', { hasOrg, ev });
+                devLog('onOrgChanged()', { hasOrg, ev, newOrg });
                 // Enable/disable based on presence of org selection.
-                setProjectEnabled(hasOrg);
+                setProjectEnabled(true);
                 setTagsEnabled(false);
-                if (tagsHelper) tagsHelper.style.display = hasOrg ? 'none' : '';
-                if (!hasOrg) {
-                    if (projectSelect) {
-                        try { projectSelect.value = ''; } catch {}
-                        try { projectSelect.dispatchEvent(new Event('change')); } catch {}
-                    }
-                    if (tagsList) {
-                        try { tagsList.value = []; } catch {}
-                        try { tagsList.dispatchEvent(new Event('change')); } catch {}
-                    }
-                    return;
-                }
+                if (tagsHelper) tagsHelper.style.display = true ? 'none' : '';
                 if (projectSelect) {
                     // Clear the bound setting for projectId
                     try { projectSelect.value = ''; } catch {}
@@ -294,9 +271,9 @@
                 }
             }
             if (orgSelect) {
-                orgSelect.addEventListener('change', onOrgChanged);
+                // orgSelect.addEventListener('change', onOrgChanged);
                 orgSelect.addEventListener('input', onOrgChanged);
-                orgSelect.addEventListener('sdpi-change', onOrgChanged);
+                // orgSelect.addEventListener('sdpi-change', onOrgChanged);
             }
 
             // After components initialize, toggle availability based on current organization selection.
@@ -307,62 +284,6 @@
                 if (tagsHelper) tagsHelper.style.display = hasOrg ? 'none' : '';
             }, 200);
 
-            // Listen for plugin messages to surface warnings (empty orgs or missing project)
-            if (window.streamDeck && window.streamDeck.plugin) {
-                window.streamDeck.plugin.onSendToPropertyInspector((ev) => {
-                    if (!ev || !ev.payload) return;
-                    if (ev.payload.event === 'getOrganizations') {
-                        devLog('getOrganizations', ev.payload.items);
-                        const items = ev.payload.items || [];
-                        if (orgWarning) orgWarning.style.display = (items.length === 0) ? '' : 'none';
-                    }
-                    if (ev.payload.event === 'getProjects') {
-                        devLog('getProjects', ev.payload.items);
-                        const items = ev.payload.items || [];
-                        if (projectWarning) {
-                            // If a project is set but not in the list, show warning
-                            (async () => {
-                                try {
-                                    const settings = await ev.action.getSettings();
-                                    const current = settings && settings.projectId;
-                                    const exists = !!items.find(i => i.value === current);
-                                    projectWarning.style.display = (current && !exists) ? '' : 'none';
-                                } catch {}
-                            })();
-                        }
-                    }
-
-                    if (ev.payload.event === 'getTags') {
-                        devLog('getTags', ev.payload.items);
-                        const items = ev.payload.items || [];
-                        if (tagsEmpty) tagsEmpty.style.display = (items.length === 0) ? '' : 'none';
-                        if (tagsRemovedWarning) tagsRemovedWarning.style.display = 'none';
-
-                        // Check if selected tags still exist; if not, unset missing and warn
-                        (async () => {
-                            try {
-                                const settings = await ev.action.getSettings();
-                                const selected = Array.isArray(settings.tagIds) ? settings.tagIds : (settings.tagIds ? [settings.tagIds] : []);
-                                const validSet = new Set((items || []).map(i => i.value));
-                                const filtered = selected.filter(id => validSet.has(id));
-                                const removedCount = selected.length - filtered.length;
-                                if (removedCount > 0) {
-                                    try { await ev.action.setSettings({ ...settings, tagIds: filtered }); } catch {}
-                                    tagsRemovedWarning.style.display = '';
-                                }
-                            } catch {}
-                        })();
-                    }
-
-                    if (ev.payload.event === 'tagsPatchError' || ev.payload.event === 'tagsFetchError') {
-                        if (tagsError) {
-                            if (ev.payload.message) tagsError.textContent = ev.payload.message;
-                            tagsError.style.display = '';
-                            setTimeout(() => { if (tagsError) tagsError.style.display = 'none'; }, 4000);
-                        }
-                    }
-                });
-            }
         });
     </script>
 </body>

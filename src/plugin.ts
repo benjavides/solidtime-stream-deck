@@ -236,12 +236,6 @@ streamDeck.settings.onDidReceiveGlobalSettings(async (ev: DidReceiveGlobalSettin
     }
 });
 
-streamDeck.settings.onDidReceiveSettings(async (ev: DidReceiveSettingsEvent<ActionSettings>) => {
-    streamDeck.logger.info("Action settings were updated by the UI.");
-    const newSettings = ev.payload.settings;
-    streamDeck.logger.info("Action settings:", newSettings);
-});
-
 streamDeck.devices.onDeviceDidConnect(async (ev: DeviceDidConnectEvent) => {
     streamDeck.logger.info(`Device ${ev.device.name} connected.`);
     streamDeck.logger.info("Checking for existing global settings...");
