@@ -1,7 +1,7 @@
-import streamDeck, { DeviceDidConnectEvent, DidReceiveGlobalSettingsEvent, LogLevel } from "@elgato/streamdeck";
+import streamDeck, { DeviceDidConnectEvent, DidReceiveGlobalSettingsEvent, DidReceiveSettingsEvent, LogLevel } from "@elgato/streamdeck";
 import { ApiClient } from "./api/client";
 import { ToggleProjectAction } from "./actions/toggle-project";
-import { GlobalSettings } from "./settings";
+import { ActionSettings, GlobalSettings } from "./settings";
 import { Project, TimeEntry, Membership, Tag } from "./api/types";
 
 // --- Setup ---
@@ -234,6 +234,12 @@ streamDeck.settings.onDidReceiveGlobalSettings(async (ev: DidReceiveGlobalSettin
     if (credentialsChanged) {
         await initializeApiClient(newSettings);
     }
+});
+
+streamDeck.settings.onDidReceiveSettings(async (ev: DidReceiveSettingsEvent<ActionSettings>) => {
+    streamDeck.logger.info("Action settings were updated by the UI.");
+    const newSettings = ev.payload.settings;
+    streamDeck.logger.info("Action settings:", newSettings);
 });
 
 streamDeck.devices.onDeviceDidConnect(async (ev: DeviceDidConnectEvent) => {

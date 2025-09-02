@@ -17,28 +17,46 @@
             flex-shrink: 0;
             margin-left: 8px;
         }
+        .section {
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 6px;
+            padding: 10px 12px;
+            margin-bottom: 14px;
+        }
+        .section-title {
+            font-weight: 600;
+            margin: 0 0 8px 0;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            opacity: 0.9;
+        }
     </style>
 </head>
 
 <body>
-    <sdpi-item label="Solidtime URL">
-        <sdpi-textfield 
-            id="base-url-input"
-            global 
-            setting="solidtimeBaseUrl" 
-            placeholder="e.g., https://app.solidtime.io/api" 
-            required>
-        </sdpi-textfield>
-        <sdpi-note id="base-url-warning" style="display:none; margin-top:6px;">URL must end with “/api”. Example: https://app.solidtime.io/api</sdpi-note>
-    </sdpi-item>
+    <div class="section" id="global-settings">
+        <div class="section-title">Global Settings</div>
+        <sdpi-item label="Solidtime URL">
+            <sdpi-textfield 
+                id="base-url-input"
+                global 
+                setting="solidtimeBaseUrl" 
+                placeholder="e.g.:https://app.solidtime.io/api"
+                pattern="^https?://.+/api/?$"
+                required>
+            </sdpi-textfield>
+            <sdpi-note id="base-url-warning" style="display:none; margin-top:6px;">URL must end with “/api”. Example: https://app.solidtime.io/api</sdpi-note>
+        </sdpi-item>
 
-    <sdpi-item label="Access Token">
-        <sdpi-password 
-            global 
-            setting="accessToken" 
-            required>
-        </sdpi-password>
-    </sdpi-item>
+        <sdpi-item label="Access Token">
+            <sdpi-password 
+                global 
+                setting="accessToken" 
+                required>
+            </sdpi-password>
+        </sdpi-item>
+    </div>
 
     <sdpi-item label="Organization">
         <!-- Wrap in flex-container to add the button -->
@@ -49,7 +67,9 @@
                     setting="organizationId"
                     datasource="getOrganizations"
                     loading="Fetching..."
-                    placeholder="Select an organization">
+                    placeholder="Select an organization"
+                    value-type="string">
+                    
                 </sdpi-select>
             </div>
             <div class="flex-shrink">
@@ -116,6 +136,11 @@
         </div>
     </sdpi-item>
 
+    <sdpi-item id="dev-log-container" label="Dev Log" style="margin-top:12px;">
+        <sdpi-button id="dev-log-clear">Clear</sdpi-button>
+        <pre id="dev-log" style="max-height:140px; overflow:auto; margin-top:6px; font-size:11px; background:#111; color:#ddd; padding:6px; border-radius:4px; white-space:pre-wrap;"></pre>
+    </sdpi-item>
+
     
     <script>
         document.addEventListener('DOMContentLoaded', () => {
@@ -125,6 +150,11 @@
             const projectRefreshBtn = document.getElementById('project-refresh-btn');
             const tagsList = document.getElementById('tags-list');
             const tagsRefreshBtn = document.getElementById('tags-refresh-btn');
+
+            const devLogEl = document.getElementById('dev-log');
+            const devLogClearBtn = document.getElementById('dev-log-clear');
+            devLog('Initial orgSelect value:', orgSelect ? (orgSelect.value || orgSelect.getAttribute('value')) : 'n/a');
+
             const orgWarning = document.getElementById('org-warning');
             const projectWarning = document.getElementById('project-warning');
             const tagsHelper = document.getElementById('tags-helper');
@@ -133,6 +163,22 @@
             const tagsError = document.getElementById('tags-error');
             const baseUrlInput = document.getElementById('base-url-input');
             const baseUrlWarning = document.getElementById('base-url-warning');
+
+            function devLog(...args) {
+                try {
+                    if (!devLogEl) return;
+                    const time = new Date().toISOString().split('T')[1].replace('Z','');
+                    const toText = (v) => {
+                        if (v == null) return String(v);
+                        if (typeof v === 'string') return v;
+                        try { return JSON.stringify(v); } catch { return String(v); }
+                    };
+                    const line = `[${time}] ` + args.map(toText).join(' ');
+                    devLogEl.textContent = (devLogEl.textContent ? devLogEl.textContent + "\n" : '') + line;
+                    devLogEl.scrollTop = devLogEl.scrollHeight;
+                    try { console.log('[PI]', ...args); } catch {}
+                } catch {}
+            }
 
             function validateBaseUrl() {
                 if (!baseUrlInput) return true;
@@ -177,30 +223,47 @@
                 }
             }
 
+            if (devLogClearBtn) {
+                devLogClearBtn.addEventListener('click', () => {
+                    try { devLogEl.textContent = ''; } catch {}
+                });
+            }
+
             if (orgRefreshBtn && orgSelect) {
                 orgRefreshBtn.addEventListener('click', async () => {
-                    try { await window.streamDeck?.plugin?.sendToPlugin({ event: 'getOrganizations', isRefresh: true }); } catch {}
+                    try { 
+                        await window.streamDeck?.plugin?.sendToPlugin({ event: 'getOrganizations', isRefresh: true }); 
+                        devLog('orgRefreshBtn clicked, sent refresh request');
+                    } catch {}
                     orgSelect.refresh();
                 });
             }
 
             if (projectRefreshBtn && projectSelect) {
                 projectRefreshBtn.addEventListener('click', async () => {
-                    try { await window.streamDeck?.plugin?.sendToPlugin({ event: 'getProjects', isRefresh: true }); } catch {}
+                    try { 
+                        await window.streamDeck?.plugin?.sendToPlugin({ event: 'getProjects', isRefresh: true }); 
+                        devLog('projectRefreshBtn clicked, sent refresh request');
+                    } catch {}
                     projectSelect.refresh();
                 });
             }
 
             if (tagsRefreshBtn && tagsList) {
                 tagsRefreshBtn.addEventListener('click', async () => {
-                    try { await window.streamDeck?.plugin?.sendToPlugin({ event: 'getTags', isRefresh: true }); } catch {}
+                    try { 
+                        await window.streamDeck?.plugin?.sendToPlugin({ event: 'getTags', isRefresh: true }); 
+                        devLog('tagsRefreshBtn clicked, sent refresh request');
+                    } catch {}
                     try { tagsList.refresh?.(); } catch {}
                 });
             }
 
             // When the organization selection changes, reset the project, enable dropdown, and refresh list.
-            function onOrgChanged() {
+            function onOrgChanged(ev) {
                 const hasOrg = !!(orgSelect && orgSelect.value);
+
+                devLog('onOrgChanged()', { hasOrg, ev });
                 // Enable/disable based on presence of org selection.
                 setProjectEnabled(hasOrg);
                 setTagsEnabled(false);
@@ -249,10 +312,12 @@
                 window.streamDeck.plugin.onSendToPropertyInspector((ev) => {
                     if (!ev || !ev.payload) return;
                     if (ev.payload.event === 'getOrganizations') {
+                        devLog('getOrganizations', ev.payload.items);
                         const items = ev.payload.items || [];
                         if (orgWarning) orgWarning.style.display = (items.length === 0) ? '' : 'none';
                     }
                     if (ev.payload.event === 'getProjects') {
+                        devLog('getProjects', ev.payload.items);
                         const items = ev.payload.items || [];
                         if (projectWarning) {
                             // If a project is set but not in the list, show warning
@@ -268,6 +333,7 @@
                     }
 
                     if (ev.payload.event === 'getTags') {
+                        devLog('getTags', ev.payload.items);
                         const items = ev.payload.items || [];
                         if (tagsEmpty) tagsEmpty.style.display = (items.length === 0) ? '' : 'none';
                         if (tagsRemovedWarning) tagsRemovedWarning.style.display = 'none';
