@@ -48,7 +48,7 @@ function formatElapsedTime(totalSeconds: number): string {
 }
 
 
-@action({ UUID: "com.benjamin-benavides.solidtime-deck.toggle-project" })
+@action({ UUID: "com.benjavides.solidtime-deck.toggle-project" })
 export class ToggleProjectAction extends SingletonAction<ActionSettings> {
     // Properties to hold the shared API client and data from the main plugin.
     private apiClient?: ApiClient;

@@ -6,7 +6,7 @@ import path from "node:path";
 import url from "node:url";
 
 const isWatching = !!process.env.ROLLUP_WATCH;
-const sdPlugin = "com.benjamin-benavides.solidtime-deck.sdPlugin";
+const sdPlugin = "com.benjavides.solidtime-deck.sdPlugin";
 
 /**
  * @type {import('rollup').RollupOptions}
