@@ -184,6 +184,8 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
         };
         const prevTagIds = normalizeTagIds((prev as any).tagIds) || [];
         const newTagIds = normalizeTagIds((newSettings as any).tagIds) || [];
+        const prevDescription = typeof (prev as any).description === 'string' ? (prev as any).description : '';
+        const newDescription = typeof (newSettings as any).description === 'string' ? (newSettings as any).description : '';
 
         // If organization changed (including first set or clear), clear tagIds to avoid cross-org tags lingering
         const prevOrg = (prev.organizationId ?? '');
@@ -209,7 +211,8 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
 
         // If tags changed and the corresponding entry is running for same org+project, patch tags
         const tagsChanged = JSON.stringify(prevTagIds.slice().sort()) !== JSON.stringify(newTagIds.slice().sort());
-        if (tagsChanged && this.apiClient) {
+        const descriptionChanged = prevDescription !== newDescription;
+        if ((tagsChanged || descriptionChanged) && this.apiClient) {
             const activeEntry = this.getActiveTimeEntry ? this.getActiveTimeEntry() : undefined;
             if (
                 activeEntry &&
@@ -219,8 +222,13 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
                 activeEntry.organization_id === newSettings.organizationId
             ) {
                 try {
-                    // Do not log payload; keep logs high-level
-                    await this.apiClient.patchTimeEntries(newSettings.organizationId, [activeEntry.id], { tags: newTagIds });
+                    // Prepare changes without logging sensitive payload
+                    const changes: any = {};
+                    if (tagsChanged) changes.tags = newTagIds;
+                    if (descriptionChanged) changes.description = (newDescription.trim() === '' ? null : newDescription);
+                    if (Object.keys(changes).length > 0) {
+                        await this.apiClient.patchTimeEntries(newSettings.organizationId, [activeEntry.id], changes);
+                    }
                 } catch (err) {
                     streamDeck.logger.error('Failed to patch tags for active entry.');
                     // Non-blocking PI error message
@@ -293,7 +301,11 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
                     start: nowWithoutMilliseconds,
                     billable: billable,
                     // include selected tag IDs on start; avoid logging sensitive details elsewhere
-                    tags: Array.isArray(ev.payload.settings.tagIds) ? ev.payload.settings.tagIds : []
+                    tags: Array.isArray(ev.payload.settings.tagIds) ? ev.payload.settings.tagIds : [],
+                    // include description if provided
+                    ...(typeof ev.payload.settings.description === 'string' && ev.payload.settings.description.trim() !== ''
+                        ? { description: ev.payload.settings.description }
+                        : {})
                 });
             }
         } catch (error) {

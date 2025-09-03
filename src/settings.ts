@@ -13,4 +13,5 @@ export type ActionSettings = {
     showElapsedTime?: boolean;
     titleOverride?: string;
     tagIds?: string[]; // selected tag IDs (multi-select)
+    description?: string; // optional description for time entry
 };

@@ -176,7 +176,7 @@ export class ApiClient {
     public patchTimeEntries(
         organizationId: string,
         ids: string[],
-        changes: Partial<{ tags: string[] }>
+        changes: Partial<{ tags: string[]; description: string | null }>
     ): Promise<ApiResponse<TimeEntry[]>> {
         return this.patch(`/v1/organizations/${organizationId}/time-entries`, { ids, changes });
     }
