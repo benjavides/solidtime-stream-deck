@@ -1,7 +1,7 @@
 {
 	"Name": "Solidtime",
-	"Version": "0.1.0.0",
-	"Author": "Benjavides",
+	"Version": "1.0.1.0",
+	"Author": "benjavides",
 	"Actions": [
 		{
 			"Name": "Toggle Project",
@@ -23,13 +23,13 @@
 					"Image": "imgs/actions/toggle-project/key_running",
 					"TitleAlignment": "middle"
 				}
-        	]
+			]
 		}
 	],
 	"Category": "Solidtime",
 	"CategoryIcon": "imgs/plugin/category-icon",
 	"CodePath": "bin/plugin.js",
-	"Description": "Control Solidtime project timers from the stream deck",
+	"Description": "Control Solidtime project timers with Stream Deck keys",
 	"Icon": "imgs/plugin/marketplace",
 	"SDKVersion": 2,
 	"Software": {

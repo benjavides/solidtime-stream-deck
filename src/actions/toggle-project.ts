@@ -3,7 +3,9 @@ import { ApiClient } from "../api/client";
 import { Project, TimeEntry, Membership, Tag } from "../api/types";
 import { ActionSettings } from "../settings";
 
-// Define constants for the two states from the manifest for readability.
+// IMPORTANT: These state indices must match the order of the "States" array
+// in `com.benjavides.solidtime-deck.sdPlugin/manifest.json`.
+// 0 = Not Running, 1 = Running
 const STOPPED_STATE = 0;
 const RUNNING_STATE = 1;
 

@@ -14,7 +14,6 @@
 
 [![youtube_thumbnail](./assets/youtube_thumbnail.png)](https://www.youtube.com/watch?v=-RmgRb7lD84 "Plugin demo")
 
-
 - Start/stop project timers with one key press.
 - Assign different projects or organizations per key.
 - See running status and elapsed time on your Stream Deck.
@@ -24,29 +23,26 @@
 
 - Stream Deck app 6.5 or newer (Windows 10 / macOS 12 or later).
 - A Solidtime account.
+- Plugin developed using Solidtime API v0.0.1
 
 ## Run locally
 
 If you want to modify or run the plugin locally:
 
 1. Clone this repository.
-
 2. Install dependencies:
 
    ```bash
    npm install
    ```
-
 3. Build the plugin:
 
    ```bash
    npm run build
    ```
-
 4. Or run in watch mode (auto-build and restart Stream Deck):
 
    ```bash
    npm run watch
    ```
-
 5. The built plugin is output to the `com.benjavides.solidtime-deck.sdPlugin` folder. Load it with the [Elgato CLI](https://www.npmjs.com/package/@elgato/cli) or by placing it in your Stream Deck plugins directory.
