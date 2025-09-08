@@ -4,9 +4,14 @@
 
 ![demo](./assets/demo.gif)
 
+## Download
+
+- Free: Download the latest release from [GitHub Releases](https://github.com/benjavides/solidtime-stream-deck/releases/latest).
+- Support the project: Buy it on the [Elgato Marketplace](https://marketplace.elgato.com/product/solidtime-17afdd53-5e98-448b-96b7-d2ffe9516046) for $5.
+
 ## How to use
 
-1. Install the plugin from the Elgato Marketplace.
+1. Install the plugin from the **Elgato Marketplace** or from the [GitHub Releases](https://github.com/benjavides/solidtime-stream-deck/releases/latest).
 2. Enter your Solidtime base URL and API Token. In Solidtime go to Profile Settings/**Create API Token**.
 3. Assign a project to a key and press it to start or stop tracking time.
 
