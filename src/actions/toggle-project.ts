@@ -49,6 +49,17 @@ function formatElapsedTime(totalSeconds: number): string {
     return parts.join(' ');
 }
 
+/**
+ * Normalizes a tagIds setting value (array, single string or missing) to string[].
+ */
+function normalizeTagIds(v: unknown): string[] | undefined {
+    if (Array.isArray(v)) return v.filter(Boolean).map(String);
+    if (v == null) return undefined;
+    // handle single value
+    if (typeof v === 'string') return v ? [v] : [];
+    return undefined;
+}
+
 
 @action({ UUID: "com.benjavides.solidtime-deck.toggle-project" })
 export class ToggleProjectAction extends SingletonAction<ActionSettings> {
@@ -173,17 +184,19 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
         if (!ev.action.isKey()) return;
 
         const newSettings = ev.payload.settings || {};
-        
-        const prev = this.lastSettingsByActionId.get(ev.action.id) || {};
+        const activeEntryForTitle = this.getActiveTimeEntry ? this.getActiveTimeEntry() : undefined;
 
-        // Normalize tagIds to string[]
-        const normalizeTagIds = (v: any): string[] | undefined => {
-            if (Array.isArray(v)) return v.filter(Boolean).map(String);
-            if (v == null) return undefined;
-            // handle single value
-            if (typeof v === 'string') return v ? [v] : [];
-            return undefined;
-        };
+        // This event also fires in response to our own getSettings() calls (e.g. every poll), not only
+        // when the PI changes something. If we have no previous snapshot for this button (plugin just
+        // started), there is nothing to diff against: just remember the settings. Treating the empty
+        // snapshot as "organization changed" used to wipe the button's saved tags after every restart.
+        const prev = this.lastSettingsByActionId.get(ev.action.id);
+        if (!prev) {
+            this.lastSettingsByActionId.set(ev.action.id, { ...newSettings, tagIds: normalizeTagIds(newSettings.tagIds) || [] });
+            await this.updateTitle(ev.action, newSettings, activeEntryForTitle);
+            return;
+        }
+
         const prevTagIds = normalizeTagIds((prev as any).tagIds) || [];
         const newTagIds = normalizeTagIds((newSettings as any).tagIds) || [];
         const prevDescription = typeof (prev as any).description === 'string' ? (prev as any).description : '';
@@ -194,7 +207,7 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
         const newOrg = (newSettings.organizationId ?? '');
         const orgChanged = prevOrg !== newOrg;
         if (orgChanged){
-            streamDeck.logger.info("Organization changed from {prevOrg} to {newOrg}", { prevOrg, newOrg });
+            streamDeck.logger.info(`Organization changed from '${prevOrg}' to '${newOrg}' (clearing ${newTagIds.length} tag(s))`);
             if (newTagIds.length > 0) {
                 try {
                     await ev.action.setSettings({ ...newSettings, tagIds: [] });
@@ -243,9 +256,9 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
         }
 
         // Cache latest settings for next diff and update title
-        this.lastSettingsByActionId.set(ev.action.id, { ...newSettings, tagIds: newTagIds });
-        const activeEntry = this.getActiveTimeEntry ? this.getActiveTimeEntry() : undefined;
-        await this.updateTitle(ev.action, newSettings, activeEntry);
+        // On an org change the tags were just cleared above, so cache what was actually saved.
+        this.lastSettingsByActionId.set(ev.action.id, { ...newSettings, tagIds: orgChanged ? [] : newTagIds });
+        await this.updateTitle(ev.action, newSettings, activeEntryForTitle);
     }
     
     /**
@@ -321,6 +334,9 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
 
     override onWillAppear(ev: WillAppearEvent<ActionSettings>): void {
         if (!ev.action.isKey()) return;
+        // Seed the diff baseline with the persisted settings so later events compare against reality.
+        const settings = ev.payload.settings || {};
+        this.lastSettingsByActionId.set(ev.action.id, { ...settings, tagIds: normalizeTagIds(settings.tagIds) || [] });
         ev.action.setState(STOPPED_STATE);
     }
     
