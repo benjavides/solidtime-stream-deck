@@ -1,6 +1,6 @@
 {
 	"Name": "Solidtime",
-	"Version": "1.0.2.0",
+	"Version": "1.0.3.0",
 	"Author": "benjavides",
 	"Actions": [
 		{
@@ -31,9 +31,9 @@
 	"CodePath": "bin/plugin.js",
 	"Description": "Control Solidtime project timers with Stream Deck keys",
 	"Icon": "imgs/plugin/marketplace",
-	"SDKVersion": 2,
+	"SDKVersion": 3,
 	"Software": {
-		"MinimumVersion": "6.5"
+		"MinimumVersion": "6.9"
 	},
 	"OS": [
 		{

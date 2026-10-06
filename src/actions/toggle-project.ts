@@ -1,4 +1,5 @@
-import { action, SendToPluginEvent, WillAppearEvent, WillDisappearEvent, JsonValue, SingletonAction, streamDeck, KeyDownEvent, DidReceiveSettingsEvent, KeyAction } from "@elgato/streamdeck";
+import type { JsonValue } from "@elgato/utils";
+import { action, SendToPluginEvent, WillAppearEvent, WillDisappearEvent, SingletonAction, streamDeck, KeyDownEvent, DidReceiveSettingsEvent, KeyAction } from "@elgato/streamdeck";
 import { ApiClient } from "../api/client";
 import { Project, TimeEntry, Membership, Tag } from "../api/types";
 import { ActionSettings } from "../settings";
@@ -215,7 +216,7 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
             }
             try {
                 // Notify the specific PI for this action context
-                streamDeck.ui.current?.sendToPropertyInspector({
+                streamDeck.ui.sendToPropertyInspector({
                     event: "organizationChanged",
                     organizationId: newOrg || ""
                 });
@@ -247,7 +248,7 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
                 } catch (err) {
                     streamDeck.logger.error('Failed to patch tags for active entry.');
                     // Non-blocking PI error message
-                    streamDeck.ui.current?.sendToPropertyInspector({
+                    streamDeck.ui.sendToPropertyInspector({
                         event: 'tagsPatchError',
                         message: 'Failed to update tags on the running entry.'
                     });
@@ -369,7 +370,7 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
                 label: m.organization.name,
                 value: m.organization.id
             }));
-            streamDeck.ui.current?.sendToPropertyInspector({
+            streamDeck.ui.sendToPropertyInspector({
                 event: "getOrganizations",
                 items: organizationItems
             });
@@ -383,7 +384,7 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
             const isRefresh = "isRefresh" in ev.payload && (ev.payload as any).isRefresh === true;
 
             if (!orgId || !this.getProjectsForOrg) {
-                streamDeck.ui.current?.sendToPropertyInspector({ event: "getProjects", items: [] });
+                streamDeck.ui.sendToPropertyInspector({ event: "getProjects", items: [] });
                 return;
             }
 
@@ -394,7 +395,7 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
 
             const projects = await this.getProjectsForOrg(orgId);
             const projectItems = projects.map(project => ({ label: project.name, value: project.id }));
-            streamDeck.ui.current?.sendToPropertyInspector({ event: "getProjects", items: projectItems });
+            streamDeck.ui.sendToPropertyInspector({ event: "getProjects", items: projectItems });
         }
 
         // Handle the request for the tags list
@@ -404,7 +405,7 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
             const isRefresh = "isRefresh" in ev.payload && (ev.payload as any).isRefresh === true;
 
             if (!orgId || !this.getTagsForOrg) {
-                streamDeck.ui.current?.sendToPropertyInspector({ event: "getTags", items: [] });
+                streamDeck.ui.sendToPropertyInspector({ event: "getTags", items: [] });
                 return;
             }
 
@@ -414,7 +415,7 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
 
             const tags = await this.getTagsForOrg(orgId);
             const tagItems = tags.map((tag: Tag) => ({ label: tag.name, value: tag.id }));
-            streamDeck.ui.current?.sendToPropertyInspector({ event: "getTags", items: tagItems });
+            streamDeck.ui.sendToPropertyInspector({ event: "getTags", items: tagItems });
         }
     }
 }

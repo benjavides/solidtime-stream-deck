@@ -1,11 +1,11 @@
-import streamDeck, { DeviceDidConnectEvent, DidReceiveGlobalSettingsEvent, DidReceiveSettingsEvent, LogLevel } from "@elgato/streamdeck";
+import streamDeck, { DeviceDidConnectEvent, DidReceiveGlobalSettingsEvent, DidReceiveSettingsEvent } from "@elgato/streamdeck";
 import { ApiClient } from "./api/client";
 import { ToggleProjectAction } from "./actions/toggle-project";
 import { ActionSettings, GlobalSettings } from "./settings";
 import { Project, TimeEntry, Membership, Tag } from "./api/types";
 
 // --- Setup ---
-streamDeck.logger.setLevel(LogLevel.DEBUG);
+streamDeck.logger.setLevel("debug");
 
 // --- Plugin-wide State Management ---
 let apiClient: ApiClient | undefined;
@@ -147,7 +147,7 @@ async function ensureTagsForOrg(orgId: string, force = false): Promise<Tag[]> {
             streamDeck.logger.error(`Failed to fetch tags for org ${orgId}:`, err);
             // Surface a non-blocking PI error
             try {
-                (streamDeck.ui.current as any)?.sendToPropertyInspector?.({ event: 'tagsFetchError', message: 'Failed to fetch tags. Showing cached list if available.' });
+                streamDeck.ui.sendToPropertyInspector({ event: 'tagsFetchError', message: 'Failed to fetch tags. Showing cached list if available.' });
             } catch {}
             return prior;
         } finally {
